@@ -95,9 +95,9 @@ public class ModuleInfoCompiler {
                 moduleVisitor.visitMainClass(mainClass.replace('.', '/'));
             }
 
-            /*if (!md.getNameAsString().equals("java.base")) {
+            if (!md.getNameAsString().equals("java.base")) {
                 moduleVisitor.visitRequire("java.base", 0, null);
-            }*/
+            }
 
             for (ModuleDirective directive : md.getDirectives()) {
                 if (directive.isModuleExportsDirective()) {
