@@ -83,7 +83,7 @@ public class ModuleInfoCompiler {
 
             if (md.getAnnotations() != null) {
                 md.getAnnotations().forEach(ant -> {
-                    AnnotationVisitor annotationVisitor = classWriter.visitAnnotation(ant.getNameAsString(),true);
+                    AnnotationVisitor annotationVisitor = classWriter.visitAnnotation("L" + ant.getNameAsString().replace('.', '/') + ";",true);
                     annotationVisitor.visitEnd();
                 });
             }
@@ -95,9 +95,9 @@ public class ModuleInfoCompiler {
                 moduleVisitor.visitMainClass(mainClass.replace('.', '/'));
             }
 
-            if (!md.getNameAsString().equals("java.base")) {
+            /*if (!md.getNameAsString().equals("java.base")) {
                 moduleVisitor.visitRequire("java.base", 0, null);
-            }
+            }*/
 
             for (ModuleDirective directive : md.getDirectives()) {
                 if (directive.isModuleExportsDirective()) {

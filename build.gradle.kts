@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "io.github.machaval"
-version = "3.0"// + "-SNAPSHOT"
+version = "3.1"// + "-SNAPSHOT"
 
 repositories {
     mavenCentral()
