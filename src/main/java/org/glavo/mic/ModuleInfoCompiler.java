@@ -5,8 +5,19 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.Name;
-import com.github.javaparser.ast.modules.*;
+import com.github.javaparser.ast.modules.ModuleDeclaration;
+import com.github.javaparser.ast.modules.ModuleDirective;
+import com.github.javaparser.ast.modules.ModuleExportsDirective;
+import com.github.javaparser.ast.modules.ModuleOpensDirective;
+import com.github.javaparser.ast.modules.ModuleProvidesDirective;
+import com.github.javaparser.ast.modules.ModuleRequiresDirective;
+import com.github.javaparser.ast.modules.ModuleUsesDirective;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.ModuleVisitor;
@@ -84,6 +95,13 @@ public class ModuleInfoCompiler {
             if (md.getAnnotations() != null) {
                 md.getAnnotations().forEach(ant -> {
                     AnnotationVisitor annotationVisitor = classWriter.visitAnnotation("L" + ant.getNameAsString().replace('.', '/') + ";",true);
+                    if (ant.isSingleMemberAnnotationExpr()) {
+                        visitAnnotationValue(annotationVisitor, "value", ant.asSingleMemberAnnotationExpr().getMemberValue());
+                    } else if (ant.isNormalAnnotationExpr()) {
+                        for (MemberValuePair pair : ant.asNormalAnnotationExpr().getPairs()) {
+                            visitAnnotationValue(annotationVisitor, pair.getNameAsString(), pair.getValue());
+                        }
+                    }
                     annotationVisitor.visitEnd();
                 });
             }
@@ -135,6 +153,50 @@ public class ModuleInfoCompiler {
 
         } catch (ParseProblemException e) {
             throw new IOException(e);
+        }
+    }
+
+    private void visitAnnotationValue(AnnotationVisitor visitor, String name, Expression value) {
+        if (value.isStringLiteralExpr()) {
+            visitor.visit(name, value.asStringLiteralExpr().getValue());
+        } else if (value.isIntegerLiteralExpr()) {
+            visitor.visit(name, Integer.valueOf(value.asIntegerLiteralExpr().getValue()));
+        } else if (value.isLongLiteralExpr()) {
+            visitor.visit(name, Long.valueOf(value.asLongLiteralExpr().getValue().replace("L", "").replace("l", "")));
+        } else if (value.isDoubleLiteralExpr()) {
+            visitor.visit(name, Double.valueOf(value.asDoubleLiteralExpr().getValue().replace("D", "").replace("d", "")));
+        } else if (value.isDoubleLiteralExpr() && (value.asDoubleLiteralExpr().getValue().endsWith("f") || value.asDoubleLiteralExpr().getValue().endsWith("F"))) {
+            String floatValue = value.asDoubleLiteralExpr().getValue().replace("F", "").replace("f", "");
+            visitor.visit(name, Float.valueOf(floatValue));
+        } else if (value.isBooleanLiteralExpr()) {
+            visitor.visit(name, value.asBooleanLiteralExpr().getValue());
+        } else if (value.isClassExpr()) {
+            visitor.visit(name, org.objectweb.asm.Type.getType("L" + value.asClassExpr().getTypeAsString().replace('.', '/') + ";"));
+        } else if (value.isArrayInitializerExpr()) {
+            ArrayInitializerExpr arrayExpr = value.asArrayInitializerExpr();
+            AnnotationVisitor arrayVisitor = visitor.visitArray(name);
+            for (Expression element : arrayExpr.getValues()) {
+                visitAnnotationValue(arrayVisitor, null, element);
+            }
+            arrayVisitor.visitEnd();
+        } else if (value.isAnnotationExpr()) {
+            AnnotationExpr annotationExpr = value.asAnnotationExpr();
+            AnnotationVisitor nestedVisitor = visitor.visitAnnotation(name, "L" + annotationExpr.getNameAsString().replace('.', '/') + ";");
+            if (annotationExpr.isSingleMemberAnnotationExpr()) {
+                visitAnnotationValue(nestedVisitor, "value", annotationExpr.asSingleMemberAnnotationExpr().getMemberValue());
+            } else if (annotationExpr.isNormalAnnotationExpr()) {
+                for (MemberValuePair pair : annotationExpr.asNormalAnnotationExpr().getPairs()) {
+                    visitAnnotationValue(nestedVisitor, pair.getNameAsString(), pair.getValue());
+                }
+            }
+            nestedVisitor.visitEnd();
+        } else if (value.isFieldAccessExpr()) {
+            // Handle enum constants
+            FieldAccessExpr fieldExpr = value.asFieldAccessExpr();
+            visitor.visitEnum(name, "L" + fieldExpr.getScope().toString().replace('.', '/') + ";", fieldExpr.getNameAsString());
+        } else {
+            // For other expressions, try to convert to string as fallback
+            visitor.visit(name, value.toString());
         }
     }
 
